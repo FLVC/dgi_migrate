@@ -8,7 +8,7 @@
         "discoverygarden/islandora_drush_utils": "^1",
         "discoverygarden/update-helper": "^1",
         "drupal/imagemagick": "^3.2",
-        "drupal/migrate_directory": "^1 || ^2",
+        "flvc/migrate_directory": "dev-2.x",
         "drupal/migrate_plus": "^5.1 || ^6",
         "drupal/migrate_tools": "^6.0.4",
         "drupal/paragraphs": "^1",
