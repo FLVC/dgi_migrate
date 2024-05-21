@@ -9,7 +9,7 @@ function wwwdrush () {
 }
 
 function timedwwwdrush () {
-  wwwdo $TIME --verbose $DRUSH "--root=$DRUPAL_ROOT" "--uri=$URI" ${@:1}
+  wwwdo $TIME -v $DRUSH "--root=$DRUPAL_ROOT" "--uri=$URI" ${@:1}
 }
 
 function get_op_number () {
