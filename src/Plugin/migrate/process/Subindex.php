@@ -2,10 +2,10 @@
 
 namespace Drupal\dgi_migrate\Plugin\migrate\process;
 
-use Drupal\migrate\ProcessPluginBase;
-use Drupal\migrate\MigrateExecutableInterface;
-use Drupal\migrate\Row;
 use Drupal\migrate\MigrateException;
+use Drupal\migrate\MigrateExecutableInterface;
+use Drupal\migrate\ProcessPluginBase;
+use Drupal\migrate\Row;
 
 /**
  * Accesses a property from an object.
@@ -25,7 +25,7 @@ use Drupal\migrate\MigrateException;
  *     dereference, to attempt to use as the index to access.
  * - "skip_row_if_missing": Deprecated in favour of "missing_behavior". A flag
  *   to indicate if the row should be skipped when we find there's no value.
- * - "missing_behaviour": A string indicating what should happen when we fail
+ * - "missing_behavior": A string indicating what should happen when we fail
  *   to find the target value. One of:
  *   - "abort": Stop the migration, throwing an exception.
  *   - "skip_process": Stop processing the property.

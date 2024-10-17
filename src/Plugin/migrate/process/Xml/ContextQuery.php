@@ -2,10 +2,10 @@
 
 namespace Drupal\dgi_migrate\Plugin\migrate\process\Xml;
 
-use Drupal\migrate\ProcessPluginBase;
-use Drupal\migrate\MigrateExecutableInterface;
-use Drupal\migrate\Row;
 use Drupal\dgi_migrate\Plugin\migrate\process\MissingBehaviorTrait;
+use Drupal\migrate\MigrateExecutableInterface;
+use Drupal\migrate\ProcessPluginBase;
+use Drupal\migrate\Row;
 
 /**
  * Query a DOMXPath using a DOMNode context as the source.
@@ -27,11 +27,11 @@ class ContextQuery extends ProcessPluginBase {
   use MissingBehaviorTrait;
 
   /**
-   * The instance on which to run the query.
+   * Reference to the instance in the row on which to run the query.
    *
-   * @var \DOMXPath
+   * @var string
    */
-  protected mixed $xpath;
+  protected string $xpath;
 
   /**
    * The query to execute.
@@ -84,7 +84,7 @@ class ContextQuery extends ProcessPluginBase {
       ]));
     }
 
-    return call_user_func([$xpath, $this->method], $this->query, $value);
+    return $xpath->{$this->method}($this->query, $value);
   }
 
 }

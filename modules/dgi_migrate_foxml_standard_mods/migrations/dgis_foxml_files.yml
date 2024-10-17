@@ -2,6 +2,9 @@
 id: dgis_foxml_files
 label: Create File entities from exported FOXML
 migration_group: foxml_to_dgis
+migration_tags:
+  - dgi_migrate_foxml_standard_mods
+  - migration_group:foxml_to_dgis
 source:
   plugin: foxml
   track_changes: true
@@ -11,35 +14,16 @@ source:
   # validation of the URI in the destination may fail (presumably, naive URI
   # validation inside of Drupal, expecting HTTP-like URLs)... or may just
   # require a third slash to imply an empty "authority" component?
-  cache_counts: true
+  # XXX: For big sets of things, counting could take a substantial amount of
+  # time, so let's skip it.
+  skip_count: true
 destination:
   plugin: entity:file
   validate: true
 process:
-  uri: uri
-  _validate:
-    # XXX: Initial safety business... try to avoid operating on files which are
-    # writable, to avoid potentially deleting them on a rollback.
-    - plugin: callback
-      callable: is_writable
-      source: '@uri'
-    - plugin: dgi_migrate.process.log
-      template: 'Should not be writable... is it? :value'
-      level: 4
-    - plugin: skip_on_value
-      value: true
-      method: row
-    - plugin: callback
-      callable: dirname
-      source: '@uri'
-    - plugin: callback
-      callable: is_writable
-    - plugin: dgi_migrate.process.log
-      template: 'Directory should not be writable... is it? :value'
-      level: 4
-    - plugin: skip_on_value
-      value: true
-      method: row
+  uri:
+    - plugin: dgi_migrate.non_writable
+      source: uri
   _parsed:
     plugin: foxml.parse
     source: path

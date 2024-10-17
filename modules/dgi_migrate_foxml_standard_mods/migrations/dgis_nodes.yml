@@ -2,6 +2,9 @@
 id: dgis_nodes
 label: Create nodes from each FOXML File entity
 migration_group: foxml_to_dgis
+migration_tags:
+  - dgi_migrate_foxml_standard_mods
+  - migration_group:foxml_to_dgis
 source:
   plugin: dgi_migrate.source.migration
   track_changes: true
@@ -41,9 +44,13 @@ source:
               # to the vocab in which to do the things.
               - '@_vid'
           - plugin: flatten
-          - plugin: migration_lookup
+          - plugin: dgi_migrate.process.locking_migration_lookup
             migration: dgis_stub_terms_generic
             stub_id: dgis_stub_terms_generic
+            lock_context_keys:
+              dgis_stub_terms_generic:
+                - { offset: [3] }
+                - { offset: [1], hash: '##'}
       extract: &generic_term_extract
         plugin: dgi_migrate.process.single_extract
         index: [actual]
@@ -55,6 +62,9 @@ destination:
   #translations: true
   validate: &validate true
 process:
+  _unspecified_term:
+    - plugin: default_value
+      default_value: 'Unspecified'
   _node_foxml_parsed:
     - plugin: dgi_migrate.load_entity
       source: fid
@@ -68,6 +78,7 @@ process:
       method: models
     - plugin: skip_on_empty
       method: row
+      message: 'Skipping; no model defined.'
   title:
     - plugin: dgi_migrate.subproperty
       source: '@_node_foxml_parsed'
@@ -236,6 +247,9 @@ process:
         - '@_sequence_number'
         - '@_constituent_sequence'
     - plugin: null_coalesce
+    # Prevent leading zeroes from crashing the migration.
+    - plugin: callback
+      callable: intval
     - plugin: skip_on_empty
       method: process
   _mods_xpath:
@@ -245,6 +259,9 @@ process:
       missing_behavior: skip_process
     - plugin: dgi_migrate.method
       method: getUri
+    - plugin: skip_on_empty
+      method: row
+      message: 'Failed to fetch the MODS XML.'
     # XXX: An issue in the passing off of paths/URIs to libxml prevents the use
     # of "dgi_migrate.process.xml.domfile"
     - plugin: callback
@@ -254,6 +271,7 @@ process:
     - plugin: dgi_migrate.process.xml.xpath
       namespaces:
         mods: 'http://www.loc.gov/mods/v3'
+        etd: 'http://www.ndltd.org/standards/metadata/etdms/1.0'
         xsi: 'http://www.w3.org/2001/XMLSchema-instance'
         xlink: 'http://www.w3.org/1999/xlink'
   _mods_node:
@@ -269,7 +287,7 @@ process:
     - plugin: array_shift
   field_ark:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="ark"]'
+      query: 'mods:identifier[@type="ark"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -279,7 +297,7 @@ process:
     - plugin: null_coalesce
   field_coordinates:
     - << : *base_mods_node
-      query: 'mods:subject/mods:cartographics/mods:coordinates'
+      query: 'mods:subject/mods:cartographics/mods:coordinates[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -318,7 +336,7 @@ process:
             source: '@_value/1'
   field_edtf_date_created:
     - << : *base_mods_node
-      query: 'mods:originInfo/mods:dateCreated[@keydate="yes"]'
+      query: 'mods:originInfo/mods:dateCreated[@keydate="yes"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -326,7 +344,7 @@ process:
       property: nodeValue
   field_edtf_date_issued:
     - << : *base_mods_node
-      query: 'mods:originInfo/mods:dateIssued[@keydate="yes"]'
+      query: 'mods:originInfo/mods:dateIssued[@keydate="yes"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -334,7 +352,7 @@ process:
       property: nodeValue
   field_description:
     - << : *base_mods_node
-      query: 'mods:abstract'
+      query: 'mods:abstract[@displayLabel="summary"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -344,7 +362,7 @@ process:
     - plugin: null_coalesce
   field_digital_origin:
     - << : *base_mods_node
-      query: 'mods:physicalDescription/mods:digitalOrigin'
+      query: 'mods:physicalDescription/mods:digitalOrigin[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -352,7 +370,7 @@ process:
       property: nodeValue
   field_doi:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="doi"]'
+      query: 'mods:identifier[@type="doi"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -362,7 +380,7 @@ process:
     - plugin: null_coalesce
   field_electronic_locator:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:electronicLocator'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:electronicLocator[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -372,7 +390,7 @@ process:
     - plugin: null_coalesce
   field_enumeration_and_chronology:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:enumerationAndChronology'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:enumerationAndChronology[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -382,7 +400,7 @@ process:
     - plugin: null_coalesce
   field_extent:
     - << : *base_mods_node
-      query: 'mods:physicalDescription/mods:extent'
+      query: 'mods:physicalDescription/mods:extent[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -390,7 +408,7 @@ process:
       property: nodeValue
   field_faceted_subject:
     - << : *base_mods_node
-      query: 'mods:subject'
+      query: 'mods:subject[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -479,7 +497,7 @@ process:
           - <<: *generic_term_extract
   field_form:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:form'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:form[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -519,7 +537,7 @@ process:
     - <<: *generic_term_extract
   field_handle:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="hdl"]'
+      query: 'mods:identifier[@type="hdl"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -529,7 +547,7 @@ process:
     - plugin: null_coalesce
   field_hierarchical_geographic_su:
     - << : *base_mods_node
-      query: 'mods:subject/mods:hierarchicalGeographic'
+      query: 'mods:subject/mods:hierarchicalGeographic[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -540,7 +558,7 @@ process:
       values:
         field_area:
           - << : *nested_mods_node
-            query: 'mods:area'
+            query: 'mods:area[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -548,7 +566,7 @@ process:
             property: nodeValue
         field_city:
           - << : *nested_mods_node
-            query: 'mods:city'
+            query: 'mods:city[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -556,7 +574,7 @@ process:
             property: nodeValue
         field_city_section:
           - << : *nested_mods_node
-            query: 'mods:citySection'
+            query: 'mods:citySection[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -564,7 +582,7 @@ process:
             property: nodeValue
         field_continent:
           - << : *nested_mods_node
-            query: 'mods:continent'
+            query: 'mods:continent[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -572,7 +590,7 @@ process:
             property: nodeValue
         field_country:
           - << : *nested_mods_node
-            query: 'mods:country'
+            query: 'mods:country[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -580,7 +598,7 @@ process:
             property: nodeValue
         field_county:
           - << : *nested_mods_node
-            query: 'mods:county'
+            query: 'mods:county[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -588,7 +606,7 @@ process:
             property: nodeValue
         field_extraterrestrial_area:
           - << : *nested_mods_node
-            query: 'mods:extraterrestrialArea'
+            query: 'mods:extraterrestrialArea[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -596,7 +614,7 @@ process:
             property: nodeValue
         field_island:
           - << : *nested_mods_node
-            query: 'mods:island'
+            query: 'mods:island[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -604,7 +622,7 @@ process:
             property: nodeValue
         field_region:
           - << : *nested_mods_node
-            query: 'mods:region'
+            query: 'mods:region[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -612,7 +630,7 @@ process:
             property: nodeValue
         field_state:
           - << : *nested_mods_node
-            query: 'mods:state'
+            query: 'mods:state[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -620,7 +638,7 @@ process:
             property: nodeValue
         field_territory:
           - << : *nested_mods_node
-            query: 'mods:territory'
+            query: 'mods:territory[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -628,17 +646,16 @@ process:
             property: nodeValue
   field_isbn:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="isbn"]'
+      query: 'mods:identifier[@type="isbn"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
     - plugin: dgi_migrate.subproperty
       property: nodeValue
     - plugin: single_value
-    - plugin: null_coalesce
   field_item_identifier:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:itemIdentifier'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:itemIdentifier[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -648,17 +665,16 @@ process:
     - plugin: null_coalesce
   field_lcc_classification:
     - << : *base_mods_node
-      query: 'mods:classification[@authority="lcc"]'
+      query: 'mods:classification[@authority="lcc"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
     - plugin: dgi_migrate.subproperty
       property: nodeValue
     - plugin: single_value
-    - plugin: null_coalesce
   field_local_identifier:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="local"]'
+      query: 'mods:identifier[@type="local"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -667,7 +683,7 @@ process:
     - plugin: single_value
   field_note_location:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:note'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:note[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -677,7 +693,7 @@ process:
     - plugin: null_coalesce
   field_note_paragraph:
     - << : *base_mods_node
-      query: 'mods:note'
+      query: 'mods:note[not(@type="funding" or @type="admin")][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -702,7 +718,7 @@ process:
             property: nodeValue
   field_note:
     - << : *base_mods_node
-      query: 'mods:physicalDescription/mods:note'
+      query: 'mods:physicalDescription/mods:note[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -712,17 +728,16 @@ process:
     - plugin: null_coalesce
   field_oclc_number:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="oclc"]'
+      query: 'mods:identifier[@type="oclc"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
     - plugin: dgi_migrate.subproperty
       property: nodeValue
     - plugin: single_value
-    - plugin: null_coalesce
   field_linked_agent:
     - << : *base_mods_node
-      query: 'mods:name[@type="personal"]'
+      query: 'mods:name[@type="personal"][normalize-space()]'
     - plugin: dgi_migrate_foxml_standard_mods.typed_relation
       field_name: node.islandora_object.field_linked_agent
       xpath: '@_mods_xpath'
@@ -789,7 +804,7 @@ process:
             method: row
   field_organizations:
     - << : *base_mods_node
-      query: 'mods:name[@type="corporate"]'
+      query: 'mods:name[@type="corporate"][normalize-space()]'
     - plugin: dgi_migrate_foxml_standard_mods.typed_relation
       field_name: node.islandora_object.field_organizations
       xpath: '@_mods_xpath'
@@ -846,7 +861,7 @@ process:
             method: row
   field_origin_information:
     - << : *base_mods_node
-      query: 'mods:originInfo'
+      query: 'mods:originInfo[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -857,7 +872,7 @@ process:
       values:
         _field_copyright_date_single:
           - << : *nested_mods_node
-            query: 'mods:copyrightDate[not(@point)]'
+            query: 'mods:copyrightDate[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -866,7 +881,7 @@ process:
           - plugin: single_value
         _field_copyright_date_start:
           - << : *nested_mods_node
-            query: 'mods:copyrightDate[@point="start"]'
+            query: 'mods:copyrightDate[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -876,7 +891,7 @@ process:
           - plugin: null_coalesce
         _field_copyright_date_end:
           - << : *nested_mods_node
-            query: 'mods:copyrightDate[@point="end"]'
+            query: 'mods:copyrightDate[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -908,7 +923,7 @@ process:
             key_direction: unlock
         _field_date_captured_single:
           - << : *nested_mods_node
-            query: 'mods:dateCaptured[not(@point)]'
+            query: 'mods:dateCaptured[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -917,7 +932,7 @@ process:
           - plugin: single_value
         _field_date_captured_start:
           - << : *nested_mods_node
-            query: 'mods:dateCaptured[@point="start"]'
+            query: 'mods:dateCaptured[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -927,7 +942,7 @@ process:
           - plugin: null_coalesce
         _field_date_captured_end:
           - << : *nested_mods_node
-            query: 'mods:dateCaptured[@point="end"]'
+            query: 'mods:dateCaptured[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -959,7 +974,7 @@ process:
             key_direction: unlock
         _field_date_created_single:
           - << : *nested_mods_node
-            query: 'mods:dateCreated[not(@point)]'
+            query: 'mods:dateCreated[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -968,7 +983,7 @@ process:
           - plugin: single_value
         _field_date_created_start:
           - << : *nested_mods_node
-            query: 'mods:dateCreated[@point="start"]'
+            query: 'mods:dateCreated[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -978,7 +993,7 @@ process:
           - plugin: null_coalesce
         _field_date_created_end:
           - << : *nested_mods_node
-            query: 'mods:dateCreated[@point="end"]'
+            query: 'mods:dateCreated[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1010,7 +1025,7 @@ process:
             key_direction: unlock
         _field_date_issued_single:
           - << : *nested_mods_node
-            query: 'mods:dateIssued[not(@point)]'
+            query: 'mods:dateIssued[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1019,7 +1034,7 @@ process:
           - plugin: single_value
         _field_date_issued_start:
           - << : *nested_mods_node
-            query: 'mods:dateIssued[@point="start"]'
+            query: 'mods:dateIssued[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1029,7 +1044,7 @@ process:
           - plugin: null_coalesce
         _field_date_issued_end:
           - << : *nested_mods_node
-            query: 'mods:dateIssued[@point="end"]'
+            query: 'mods:dateIssued[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1061,7 +1076,7 @@ process:
             key_direction: unlock
         _field_date_modified_single:
           - << : *nested_mods_node
-            query: 'mods:dateModified[not(@point)]'
+            query: 'mods:dateModified[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1070,7 +1085,7 @@ process:
           - plugin: single_value
         _field_date_modified_start:
           - << : *nested_mods_node
-            query: 'mods:dateModified[@point="start"]'
+            query: 'mods:dateModified[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1080,7 +1095,7 @@ process:
           - plugin: null_coalesce
         _field_date_modified_end:
           - << : *nested_mods_node
-            query: 'mods:dateModified[@point="end"]'
+            query: 'mods:dateModified[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1112,7 +1127,7 @@ process:
             key_direction: unlock
         _field_date_valid_single:
           - << : *nested_mods_node
-            query: 'mods:dateValid[not(@point)]'
+            query: 'mods:dateValid[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1121,7 +1136,7 @@ process:
           - plugin: single_value
         _field_date_valid_start:
           - << : *nested_mods_node
-            query: 'mods:dateValid[@point="start"]'
+            query: 'mods:dateValid[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1131,7 +1146,7 @@ process:
           - plugin: null_coalesce
         _field_date_valid_end:
           - << : *nested_mods_node
-            query: 'mods:dateValid[@point="end"]'
+            query: 'mods:dateValid[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1163,7 +1178,7 @@ process:
             key_direction: unlock
         field_edition:
           - << : *nested_mods_node
-            query: 'mods:edition'
+            query: 'mods:edition[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1179,7 +1194,7 @@ process:
             property: nodeValue
         field_frequency:
           - << : *nested_mods_node
-            query: 'mods:frequency'
+            query: 'mods:frequency[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1187,7 +1202,7 @@ process:
             property: nodeValue
         field_issuance:
           - << : *nested_mods_node
-            query: 'mods:issuance'
+            query: 'mods:issuance[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1195,7 +1210,7 @@ process:
             property: nodeValue
         _field_other_date_single:
           - << : *nested_mods_node
-            query: 'mods:dateOther[not(@point)]'
+            query: 'mods:dateOther[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1204,7 +1219,7 @@ process:
           - plugin: single_value
         _field_other_date_start:
           - << : *nested_mods_node
-            query: 'mods:dateOther[@point="start"]'
+            query: 'mods:dateOther[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1214,7 +1229,7 @@ process:
           - plugin: null_coalesce
         _field_other_date_end:
           - << : *nested_mods_node
-            query: 'mods:dateOther[@point="end"]'
+            query: 'mods:dateOther[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1256,7 +1271,7 @@ process:
           - plugin: null_coalesce
         field_publisher:
           - << : *nested_mods_node
-            query: 'mods:publisher'
+            query: 'mods:publisher[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1264,7 +1279,7 @@ process:
             property: nodeValue
   field_part:
     - << : *base_mods_node
-      query: 'mods:part'
+      query: 'mods:part[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1275,7 +1290,7 @@ process:
       values:
         field_additional_information:
           - << : *nested_mods_node
-            query: 'mods:text'
+            query: 'mods:text[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1283,7 +1298,7 @@ process:
             property: nodeValue
         field_caption:
           - << : *nested_mods_node
-            query: 'mods:detail/mods:caption'
+            query: 'mods:detail/mods:caption[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1291,7 +1306,7 @@ process:
             property: nodeValue
         _field_date_single:
           - <<: *nested_mods_node
-            query: 'mods:date[not(@point)]'
+            query: 'mods:date[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1300,7 +1315,7 @@ process:
           - plugin: single_value
         _field_date_start:
           - <<: *nested_mods_node
-            query: 'mods:date[@point="start"]'
+            query: 'mods:date[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1310,7 +1325,7 @@ process:
           - plugin: null_coalesce
         _field_date_end:
           - <<: *nested_mods_node
-            query: 'mods:date[@point="end"]'
+            query: 'mods:date[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1342,7 +1357,7 @@ process:
             key_direction: unlock
         field_end:
           - << : *nested_mods_node
-            query: 'mods:extent/mods:end'
+            query: 'mods:extent/mods:end[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1350,7 +1365,7 @@ process:
             property: nodeValue
         field_extent:
           - << : *nested_mods_node
-            query: 'mods:extent'
+            query: 'mods:extent[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1358,7 +1373,7 @@ process:
             property: nodeValue
         field_extent_units:
           - << : *nested_mods_node
-            query: 'mods:extent/@unit'
+            query: 'mods:extent[normalize-space()]/@unit'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1366,7 +1381,7 @@ process:
             property: nodeValue
         field_list:
           - << : *nested_mods_node
-            query: 'mods:extent/mods:list'
+            query: 'mods:extent/mods:list[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1374,7 +1389,7 @@ process:
             property: nodeValue
         field_number:
           - << : *nested_mods_node
-            query: 'mods:detail/mods:number'
+            query: 'mods:detail/mods:number[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1398,7 +1413,7 @@ process:
             ignore_case: true
         field_start:
           - << : *nested_mods_node
-            query: 'mods:extent/mods:start'
+            query: 'mods:extent/mods:start[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1406,7 +1421,7 @@ process:
             property: nodeValue
         field_title:
           - << : *nested_mods_node
-            query: 'mods:detail/mods:title'
+            query: 'mods:detail/mods:title[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1414,7 +1429,7 @@ process:
             property: nodeValue
         field_total:
           - << : *nested_mods_node
-            query: 'mods:extent/mods:total'
+            query: 'mods:extent/mods:total[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1452,7 +1467,7 @@ process:
     - plugin: null_coalesce
   field_purl:
     - << : *base_mods_node
-      query: 'mods:identifier[@type="purl"]'
+      query: 'mods:identifier[@type="purl"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1460,7 +1475,7 @@ process:
       property: nodeValue
   field_record_information:
     - << : *base_mods_node
-      query: 'mods:recordInfo'
+      query: 'mods:recordInfo[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1469,25 +1484,37 @@ process:
       type: record_information
       process_values: true
       values:
+        _mods_xpath:
+          # XXX: Copy here so it's available for further subprocessing.
+          - plugin: get
+            source: parent_row/dest/_mods_xpath
         field_description_standard:
           - << : *nested_mods_node
-            query: 'mods:descriptionStandard'
+            query: 'mods:descriptionStandard[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
           - plugin: dgi_migrate.subproperty
             property: nodeValue
-        field_recording_catalog_language:
-          - << : *nested_mods_node
-            query: 'mods:languageOfCataloging'
+        field_record_cataloging_language:
+          - <<: *nested_mods_node
+            query: 'mods:languageOfCataloging[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
+          - plugin: skip_on_empty
+            method: process
           - plugin: multiple_values
-          - plugin: dgi_migrate.subproperty
-            property: nodeValue
+          - plugin: dgi_migrate.sub_process
+            process_values: true
+            values:
+              _vid:
+                - plugin: default_value
+                  default_value: language
+              <<: *generic_term_after
+          - <<: *generic_term_extract
         _field_record_change_date_single:
           - << : *nested_mods_node
-            query: 'mods:recordChangeDate[not(@point)]'
+            query: 'mods:recordChangeDate[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1496,7 +1523,7 @@ process:
           - plugin: single_value
         _field_record_change_date_start:
           - << : *nested_mods_node
-            query: 'mods:recordChangeDate[@point="start"]'
+            query: 'mods:recordChangeDate[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1506,7 +1533,7 @@ process:
           - plugin: null_coalesce
         _field_record_change_date_end:
           - << : *nested_mods_node
-            query: 'mods:recordChangeDate[@point="end"]'
+            query: 'mods:recordChangeDate[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1538,7 +1565,7 @@ process:
             key_direction: unlock
         field_record_content_source:
           - << : *nested_mods_node
-            query: 'mods:recordContentSource'
+            query: 'mods:recordContentSource[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1546,7 +1573,7 @@ process:
             property: nodeValue
         _field_record_creation_date_single:
           - <<: *nested_mods_node
-            query: 'mods:recordCreationDate[not(@point)]'
+            query: 'mods:recordCreationDate[not(@point)][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1555,7 +1582,7 @@ process:
           - plugin: single_value
         _field_record_creation_date_start:
           - <<: *nested_mods_node
-            query: 'mods:recordCreationDate[@point="start"]'
+            query: 'mods:recordCreationDate[@point="start"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1565,7 +1592,7 @@ process:
           - plugin: null_coalesce
         _field_record_creation_date_end:
           - <<: *nested_mods_node
-            query: 'mods:recordCreationDate[@point="end"]'
+            query: 'mods:recordCreationDate[@point="end"][normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1597,7 +1624,7 @@ process:
             key_direction: unlock
         field_record_identifier:
           - << : *nested_mods_node
-            query: 'mods:recordIdentifier'
+            query: 'mods:recordIdentifier[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1605,7 +1632,7 @@ process:
             property: nodeValue
         field_record_information_note:
           - << : *nested_mods_node
-            query: 'mods:recordInfoNote'
+            query: 'mods:recordInfoNote[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1613,7 +1640,7 @@ process:
             property: nodeValue
         field_record_origin:
           - << : *nested_mods_node
-            query: 'mods:recordOrigin'
+            query: 'mods:recordOrigin[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1621,7 +1648,7 @@ process:
             property: nodeValue
   field_reformatting_quality:
     - << : *base_mods_node
-      query: 'mods:physicalDescription/mods:reformattingQuality'
+      query: 'mods:physicalDescription/mods:reformattingQuality[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1629,7 +1656,7 @@ process:
       property: nodeValue
   field_related_item_paragraph:
     - << : *base_mods_node
-      query: 'mods:relatedItem'
+      query: 'mods:relatedItem[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1638,6 +1665,10 @@ process:
       type: related_item
       process_values: true
       values:
+        _mods_xpath:
+          # XXX: Copy here so it's available for further subprocessing.
+          - plugin: get
+            source: parent_row/dest/_mods_xpath
         field_relationship_type:
           - << : *nested_mods_node
             query: '@type'
@@ -1659,7 +1690,7 @@ process:
             value_key: name
         field_title_plain:
           - << : *nested_mods_node
-            query: 'mods:titleInfo/mods:title'
+            query: 'mods:titleInfo/mods:title[normalize-space()]'
           - plugin: callback
             callable: iterator_to_array
           - plugin: multiple_values
@@ -1693,59 +1724,119 @@ process:
           - plugin: callback
             callable: array_filter
           - plugin: null_coalesce
-  _resource_type:
+        field_related_item_identifier:
+          - <<: *nested_mods_node
+            query: 'mods:identifier[normalize-space()]'
+          - plugin: callback
+            callable: iterator_to_array
+          - plugin: multiple_values
+          - plugin: dgi_migrate.subproperty
+            property: nodeValue
+          - plugin: callback
+            callable: trim
+          - plugin: single_value
+          - plugin: callback
+            callable: array_filter
+          - plugin: null_coalesce
+        field_related_item_genre:
+          - <<: *nested_mods_node
+            query: 'mods:genre[normalize-space()]'
+          - plugin: callback
+            callable: iterator_to_array
+          - plugin: skip_on_empty
+            method: process
+          - plugin: multiple_values
+          - plugin: dgi_migrate.sub_process
+            process_values: true
+            values:
+              _vid:
+                - plugin: default_value
+                  default_value: genre
+              <<: *generic_term_after
+          - <<: *generic_term_extract
+  _resource_type_query:
     - << : *base_mods_node
-      query: 'mods:typeOfResource'
+      query: 'mods:typeOfResource[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
+  _resource_type:
+    - plugin: get
+      source: '@_resource_type_query'
+    - plugin: skip_on_empty
+      method: process
     - plugin: multiple_values
-    - plugin: dgi_migrate.subproperty
-      property: nodeValue
-    - plugin: single_value
-    - plugin: callback
-      callable: array_filter
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: resource_types
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  _unspecified_resource_type:
+    - plugin: get
+      source: '@_resource_type_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: get
+      source: '@_unspecified_term'
+    - plugin: gate
+      use_as_key: '@_resource_type'
+      valid_keys:
+        - null
+      key_direction: unlock
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: resource_types
+        _auth_value_uri:
+          - plugin: default_value
+            default_value: ''
+        _auth_source:
+          - plugin: default_value
+            default_value: ''
+        _value:
+          - plugin: get
+            source: parent_value
+        actual:
+          - plugin: get
+            source:
+              - '@_auth_source'
+              - '@_auth_value_uri'
+              - '@_value'
+              # XXX: Needs to be provided wherever this is used, corresponding
+              # to the vocab in which to do the things.
+              - '@_vid'
+          - plugin: flatten
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_generic
+            stub_id: dgis_stub_terms_generic
+    - <<: *generic_term_extract
   field_resource_type:
-    - plugin: default_value
-      source: '@_resource_type'
-      default_value: Unspecified
-    - plugin: entity_generate
-      bundle: resource_types
-      bundle_key: vid
-      entity_type: taxonomy_term
-      value_key: name
-      ignore_case: *case_insensitive
+    - plugin: get
+      source:
+        - '@_resource_type'
+        - '@_unspecified_resource_type'
+    - plugin: null_coalesce
   field_restriction_on_access:
     - << : *base_mods_node
-      query: 'mods:accessCondition[@type="restriction on access"]'
+      query: 'mods:accessCondition[@type="restriction on access"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
     - plugin: dgi_migrate.subproperty
       property: nodeValue
-  # XXX: Was intended as outbound mapping, not inbound. Let's just comment for now.
-  #field_rights_statement:
-  #  - << : *base_mods_node
-  #    query: 'mods:accessCondition[@type="use and reproduction"]'
-  #  - plugin: callback
-  #    callable: iterator_to_array
-  #  - plugin: multiple_values
-  #  - plugin: dgi_migrate.subproperty
-  #    property: nodeValue
-  #  - plugin: entity_generate
-  #    bundle: rights_statements
-  #    bundle_key: vid
-  #    entity_type: taxonomy_term
-  #    value_key: name
-  #    ignore_case: *case_insensitive
   field_shelf_locator:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:shelfLocator'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:shelfLocator[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
     - plugin: dgi_migrate.subproperty
       property: nodeValue
-  _subject_topic:
+  field_subject:
     - << : *base_mods_node
       query: 'mods:subject/mods:topic[normalize-space()]'
     - plugin: callback
@@ -1761,7 +1852,7 @@ process:
             default_value: subject
         <<: *generic_term_after
     - <<: *generic_term_extract
-  _subject_name_personal:
+  field_subject_name_person:
     - << : *base_mods_node
       query: 'mods:subject/mods:name[@type="personal" or not(@type)][normalize-space()]'
     - plugin: callback
@@ -1832,7 +1923,7 @@ process:
             method: row
     - plugin: dgi_migrate.process.single_extract
       index: [ target_id ]
-  _subject_name_corporate:
+  field_subject_name_organization:
     - << : *base_mods_node
       query: 'mods:subject/mods:name[@type="corporate"][normalize-space()]'
     - plugin: callback
@@ -1893,16 +1984,9 @@ process:
             method: row
     - plugin: dgi_migrate.process.single_extract
       index: [ target_id ]
-  field_subject:
-    - plugin: get
-      source:
-        - '@_subject_topic'
-        - '@_subject_name_personal'
-        - '@_subject_name_corporate'
-    - plugin: flatten
   field_sub_location:
     - << : *base_mods_node
-      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:subLocation'
+      query: 'mods:location/mods:holdingSimple/mods:copyInformation/mods:subLocation[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1910,7 +1994,7 @@ process:
       property: nodeValue
   field_table_of_contents:
     - << : *base_mods_node
-      query: 'mods:tableOfContents'
+      query: 'mods:tableOfContents[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1918,7 +2002,7 @@ process:
       property: nodeValue
   field_target_audience:
     - << : *base_mods_node
-      query: 'mods:targetAudience'
+      query: 'mods:targetAudience[normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1951,7 +2035,7 @@ process:
       validate: *validate
   field_use_and_reproduction:
     - << : *base_mods_node
-      query: 'mods:accessCondition[@type="use and reproduction"]'
+      query: 'mods:accessCondition[@type="use and reproduction" or @type="Use and Reproduction"][normalize-space()]'
     - plugin: callback
       callable: iterator_to_array
     - plugin: multiple_values
@@ -1973,19 +2057,680 @@ process:
             default_value: language
         <<: *generic_term_after
     - <<: *generic_term_extract
+  field_degree_name:
+    - <<: *base_mods_node
+      query: 'mods:extension/etd:degree/etd:name[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: degree_names
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  _degree_level_query:
+    - <<: *base_mods_node
+      query: 'mods:extension/etd:degree/etd:level[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+  _degree_level:
+    - plugin: get
+      source: '@_degree_level_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: degree_levels
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  _unspecified_degree_level:
+    - plugin: get
+      source: '@_degree_level_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: get
+      source: '@_unspecified_term'
+    - plugin: gate
+      use_as_key: '@_degree_level'
+      valid_keys:
+        - null
+      key_direction: unlock
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: degree_levels
+        _auth_value_uri:
+          - plugin: default_value
+            default_value: ''
+        _auth_source:
+          - plugin: default_value
+            default_value: ''
+        _value:
+          - plugin: get
+            source: parent_value
+        actual:
+          - plugin: get
+            source:
+              - '@_auth_source'
+              - '@_auth_value_uri'
+              - '@_value'
+              # XXX: Needs to be provided wherever this is used, corresponding
+              # to the vocab in which to do the things.
+              - '@_vid'
+          - plugin: flatten
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_generic
+            stub_id: dgis_stub_terms_generic
+    - <<: *generic_term_extract
+  field_degree_level:
+    - plugin: get
+      source:
+        - '@_degree_level'
+        - '@_unspecified_degree_level'
+    - plugin: null_coalesce
+  field_department:
+    - <<: *base_mods_node
+      query: 'mods:extension/etd:degree/etd:discipline[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: discipline
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  field_institution:
+    - <<: *base_mods_node
+      query: 'mods:extension/etd:degree/etd:grantor[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: institution
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  field_version_identifier:
+    - <<: *base_mods_node
+      query: 'mods:note[@type="version identification"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_abstract:
+    - <<: *base_mods_node
+      query: 'mods:abstract[@displayLabel="academic"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_open_url:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="openurl"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_ismn:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="ismn"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_repec:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="repec"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_gpo_number:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="gpo"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_pubmed_central_number:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="pmcid"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_pubmed_number:
+    - <<: *base_mods_node
+      query: 'mods:identifier[@type="pmid"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_ddc_classification:
+    - <<: *base_mods_node
+      query: 'mods:classification[@authority="ddc"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_sudoc_number:
+    - <<: *base_mods_node
+      query: 'mods:classification[@authority="sudoc"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_swank_classification:
+    - <<: *base_mods_node
+      query: 'mods:classification[@authority="swank"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: null_coalesce
+  field_conference:
+    - <<: *base_mods_node
+      query: 'mods:name[@type="conference"]/mods:namePart[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: conference_events
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  field_series_paragraph:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="series"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_paragraph_generate
+      validate: *validate
+      type: series
+      process_values: true
+      values:
+        _mods_xpath:
+          # XXX: Copy here so it's available for further subprocessing.
+          - plugin: get
+            source: parent_row/dest/_mods_xpath
+        field_series_titles:
+          - <<: *nested_mods_node
+            query: 'mods:titleInfo/mods:title'
+          - plugin: callback
+            callable: iterator_to_array
+          - plugin: skip_on_empty
+            method: process
+          - plugin: multiple_values
+          - plugin: dgi_migrate.sub_process
+            process_values: true
+            values:
+              _vid:
+                - plugin: default_value
+                  default_value: series_titles
+              <<: *generic_term_after
+          - <<: *generic_term_extract
+        field_series_number:
+          - <<: *nested_mods_node
+            query: 'mods:titleInfo/mods:partNumber[normalize-space()]'
+          - plugin: callback
+            callable: iterator_to_array
+          - plugin: multiple_values
+          - plugin: dgi_migrate.subproperty
+            property: nodeValue
+          - plugin: callback
+            callable: trim
+          - plugin: single_value
+          - plugin: callback
+            callable: array_filter
+          - plugin: null_coalesce
+  field_publication_title:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:titleInfo/mods:title[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: titles
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  field_publication_number:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:titleInfo/mods:partNumber[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_volume_title:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:titleInfo/mods:partName[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_chapter_number:
+    - <<: *base_mods_node
+      query: 'mods:part[@type="chapter"]/mods:detail/mods:number[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_section:
+    - <<: *base_mods_node
+      query: 'mods:part[@type="section"]/mods:detail/mods:title[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_identifier:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:identifier[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_url:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:location/mods:url[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: callback
+      callable: trim
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_publication_genre:
+    - <<: *base_mods_node
+      query: 'mods:relatedItem[@type="host"]/mods:genre[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: genre
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  field_extent_total_pages:
+    - <<: *base_mods_node
+      query: 'mods:part/mods:extent/mods:total[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_extent_first_page:
+    - <<: *base_mods_node
+      query: 'mods:part/mods:extent/mods:start[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_extent_last_page:
+    - <<: *base_mods_node
+      query: 'mods:part/mods:extent/mods:end[normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  field_admin_note:
+    - <<: *base_mods_node
+      query: 'mods:note[@type="admin"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+  field_funder:
+    - << : *base_mods_node
+      query: 'mods:name[@type="corporate"][mods:role/mods:roleTerm="funder"][normalize-space(mods:namePart)]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _authority:
+          - << : *nested_mods_node
+            query: 'normalize-space(@authority)'
+            method: evaluate
+        _value_uri:
+          - << : *nested_mods_node
+            query: 'normalize-space(@valueURI)'
+            method: evaluate
+        _date_name:
+          - << : *nested_mods_node
+            query: 'normalize-space(mods:namePart[@type="date"][normalize-space()][1])'
+            method: evaluate
+        _display_form:
+          - << : *nested_mods_node
+            query: 'normalize-space(mods:displayForm[normalize-space()][1])'
+            method: evaluate
+        _untyped_names:
+          - << : *nested_mods_node
+            query: 'normalize-space(mods:namePart[not(@type)][normalize-space()])'
+            method: evaluate
+        _affiliation_lookup:
+          - << : *nested_mods_node
+            query: 'normalize-space(mods:affiliation[normalize-space()])'
+            method: evaluate
+          - plugin: skip_on_empty
+            method: process
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_affiliate
+            stub_id: dgis_stub_terms_affiliate
+        _affiliation:
+          - plugin: default_value
+            source: '@_affiliation_lookup'
+            default_value: ''
+        target_id:
+          - plugin: get
+            source:
+              - '@_authority'
+              - '@_value_uri'
+              - '@_untyped_names'
+              - '@_date_name'
+              - '@_display_form'
+              - '@_affiliation'
+          - plugin: flatten
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_corporate_body
+            stub_id: dgis_stub_terms_corporate_body
+          - plugin: skip_on_empty
+            method: row
+    - plugin: dgi_migrate.process.single_extract
+      index: [ target_id ]
+  field_sponsorship_information:
+    - <<: *base_mods_node
+      query: 'mods:note[@type="funding"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+    - plugin: multiple_values
+    - plugin: dgi_migrate.subproperty
+      property: nodeValue
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+  _use_license_query:
+    - <<: *base_mods_node
+      query: 'mods:accessCondition[@type="use and reproduction" or @type="Use and Reproduction"][@displayLabel="Creative Commons" or @displayLabe="Creative Commons"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+  _use_license:
+    - plugin: get
+      source: '@_use_license_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: creative_commons_licenses_4_0
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+  _unspecified_use_license:
+    - plugin: get
+      source: '@_use_license_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: get
+      source: '@_unspecified_term'
+    - plugin: gate
+      use_as_key: '@_use_license'
+      valid_keys:
+        - null
+      key_direction: unlock
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: creative_commons_licenses_4_0
+        _auth_value_uri:
+          - plugin: default_value
+            default_value: ''
+        _auth_source:
+          - plugin: default_value
+            default_value: ''
+        _value:
+          - plugin: get
+            source: parent_value
+        actual:
+          - plugin: get
+            source:
+              - '@_auth_source'
+              - '@_auth_value_uri'
+              - '@_value'
+              # XXX: Needs to be provided wherever this is used, corresponding
+              # to the vocab in which to do the things.
+              - '@_vid'
+          - plugin: flatten
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_generic
+            stub_id: dgis_stub_terms_generic
+    - <<: *generic_term_extract
+  field_use_license:
+    - plugin: get
+      source:
+        - '@_use_license'
+        - '@_unspecified_use_license'
+    - plugin: flatten
+  _rights_statement_query:
+    - <<: *base_mods_node
+      query: 'mods:accessCondition[@type="rights statement"][normalize-space()]'
+    - plugin: callback
+      callable: iterator_to_array
+  _rights_statement:
+    - plugin: get
+      source: '@_rights_statement_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: multiple_values
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: rights_statements
+        <<: *generic_term_after
+    - <<: *generic_term_extract
+    - plugin: single_value
+    - plugin: callback
+      callable: array_filter
+    - plugin: null_coalesce
+  _unspecified_rights_statement:
+    - plugin: get
+      source: '@_rights_statement_query'
+    - plugin: skip_on_empty
+      method: process
+    - plugin: get
+      source: '@_unspecified_term'
+    - plugin: gate
+      use_as_key: '@_rights_statement'
+      valid_keys:
+        - null
+      key_direction: unlock
+    - plugin: dgi_migrate.sub_process
+      process_values: true
+      values:
+        _vid:
+          - plugin: default_value
+            default_value: rights_statements
+        _auth_value_uri:
+          - plugin: default_value
+            default_value: ''
+        _auth_source:
+          - plugin: default_value
+            default_value: ''
+        _value:
+          - plugin: get
+            source: parent_value
+        actual:
+          - plugin: get
+            source:
+              - '@_auth_source'
+              - '@_auth_value_uri'
+              - '@_value'
+              # XXX: Needs to be provided wherever this is used, corresponding
+              # to the vocab in which to do the things.
+              - '@_vid'
+          - plugin: flatten
+          - plugin: migration_lookup
+            migration: dgis_stub_terms_generic
+            stub_id: dgis_stub_terms_generic
+    - <<: *generic_term_extract
+  field_rights_statement:
+    - plugin: get
+      source:
+        - '@_rights_statement'
+        - '@_unspecified_rights_statement'
+    - plugin: null_coalesce
   nid:
-    - plugin: migration_lookup
+    - plugin: dgi_migrate.process.locking_migration_lookup
       source: '@field_pid'
       migration: dgis_stub_nodes
+      lock_context_keys: &dgis_stub_nodes_lock_context_keys
+        dgis_stub_nodes:
+          - { offset: [ 0 ], hash: '#/##' }
   field_member_of:
     - plugin: flatten
       source:
         - '@_members'
         - '@_constituents'
     - plugin: multiple_values
-    - plugin: migration_lookup
+    - plugin: dgi_migrate.process.locking_migration_lookup
       migration: dgis_stub_nodes
       stub_id: dgis_stub_nodes
+      lock_context_keys:
+        << : *dgis_stub_nodes_lock_context_keys
 migration_dependencies:
   required:
     - dgis_foxml_files
